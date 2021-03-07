@@ -91,7 +91,7 @@ def lookup_words(x, vocab):
   return [vocab[i] for i in x]
 
 def print_examples(model, src_vocab_set, trg_vocab_set, data_loader, decoder, 
-                   beam_width=1, n=3, max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS):
+                   beam_width=1, n=3, EOS_INDEX=3, max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS):
   """Prints `n` examples. Assumes batch size of 1."""
 
   model.eval()
@@ -130,6 +130,15 @@ import sacrebleu
 from tqdm import tqdm
 
 def compute_BLEU(model, data_loader, decoder, trg_vocab_set):
+  if isinstance(model, EncoderDecoder):
+    result = greedy_decode(model, src_ids.to(device), src_lengths.to(device),
+                           max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS)
+  elif isinstance(model, EncoderAttentionDecoder):
+    result, _ = greedy_decode_attention(model, src_ids.to(device),
+                                        src_lengths.to(device),
+                                        max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS)
+  else:
+    raise NotImplementedError("Unknown model type.")
   bleu_score = []
 
   model.eval()
