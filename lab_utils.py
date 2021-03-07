@@ -91,18 +91,20 @@ def lookup_words(x, vocab):
   return [vocab[i] for i in x]
 
 def print_examples(model, src_vocab_set, trg_vocab_set, data_loader, decoder, 
-                   beam_width=1, n=3, EOS_INDEX=3, max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS):
+                   with_attention=False, n=3, EOS_INDEX=3, max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS):
   """Prints `n` examples. Assumes batch size of 1."""
 
   model.eval()
 
   for i, (src_ids, src_lengths, trg_ids, _) in enumerate(data_loader):
-    if beam_width > 1:
-      result = decoder(model, src_ids.to(device), src_lengths.to(device),
-                             max_len=max_len, beam_width=beam_width)
-    else:
+    if not with_attention:
       result = decoder(model, src_ids.to(device), src_lengths.to(device),
                              max_len=max_len)
+    else:
+      result, _ = decoder(model, src_ids.to(device),
+                                          src_lengths.to(device),
+                                          max_len=max_len)
+
     # remove <s>
     src_ids = src_ids[0, 1:]
     trg_ids = trg_ids[0, 1:]
@@ -113,49 +115,8 @@ def print_examples(model, src_vocab_set, trg_vocab_set, data_loader, decoder,
     print("Example #%d" % (i + 1))
     print("Src : ", " ".join(lookup_words(src_ids, vocab=src_vocab_set)))
     print("Trg : ", " ".join(lookup_words(trg_ids, vocab=trg_vocab_set)))
-    if beam_width > 1:
-    	for r in range(beam_width):
-    		print("Pred #%d: " % (r+1), " ".join(lookup_words(result[r], vocab=trg_vocab_set)))
-    else:
-    	print("Pred: ", " ".join(lookup_words(result, vocab=trg_vocab_set)))
+    print("Pred: ", " ".join(lookup_words(result, vocab=trg_vocab_set)))
     print()
 
     if i == n - 1:
       break
-
-###################################################################################
-###################################################################################
-
-import sacrebleu
-from tqdm import tqdm
-
-def compute_BLEU(model, data_loader, decoder, trg_vocab_set):
-  if isinstance(model, EncoderDecoder):
-    result = greedy_decode(model, src_ids.to(device), src_lengths.to(device),
-                           max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS)
-  elif isinstance(model, EncoderAttentionDecoder):
-    result, _ = greedy_decode_attention(model, src_ids.to(device),
-                                        src_lengths.to(device),
-                                        max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS)
-  else:
-    raise NotImplementedError("Unknown model type.")
-  bleu_score = []
-
-  model.eval()
-  for src_ids, src_lengths, trg_ids, _ in tqdm(data_loader):
-    result = decoder(model, src_ids.to(device), src_lengths.to(device),
-                           max_len=MAX_SENT_LENGTH_PLUS_SOS_EOS)
-    # remove <s>
-    src_ids = src_ids[0, 1:]
-    trg_ids = trg_ids[0, 1:]
-    # remove </s> and <pad>
-    src_ids = src_ids[:np.where(src_ids == EOS_INDEX)[0][0]]
-    trg_ids = trg_ids[:np.where(trg_ids == EOS_INDEX)[0][0]]
-
-    pred = " ".join(lookup_words(result, vocab=trg_vocab_set))
-    targ = " ".join(lookup_words(trg_ids, vocab=trg_vocab_set))
-
-    bleu_score.append(sacrebleu.raw_corpus_bleu([pred], [[targ]], .01).score)
-
-  return bleu_score
-
